@@ -1,0 +1,9 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# 批处理文件必须是 CRLF：cmd.exe 遇到裸 LF 会错位解析，
+# 把 `if errorlevel 1` 里的 errorlevel 当命令执行。
+# 强制 eol=crlf，保证任何平台签出都是 CRLF，上传后别人拉下来也不会踩坑。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.vbs text eol=crlf

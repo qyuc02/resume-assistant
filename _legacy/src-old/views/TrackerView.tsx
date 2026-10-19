@@ -1,0 +1,83 @@
+import { useEffect, useState } from 'react';
+import { useData } from '../store';
+import { Application, ApplicationStage } from '../types';
+import { uid } from '../util';
+import { captureResume, changeStage, localDate, STAGES } from '../tracker';
+import { exportResumeDocx } from '../docx';
+import Modal from '../components/Modal';
+import Icon from '../components/Icon';
+
+function blank(): Application {
+  return { id: uid(), company: '', position: '', city: '', salary: '', source: '', url: '', jd: '', stage: '待投递', priority: '普通', appliedDate: '', scheduleAt: '', scheduleNote: '', nextAction: '', notes: '', resumeId: '', createdAt: Date.now(), updatedAt: Date.now(), history: [] };
+}
+function safeUrl(url: string) {
+  try { const u = new URL(url); return ['http:', 'https:'].includes(u.protocol) ? u.href : undefined; } catch { return undefined; }
+}
+export default function TrackerView({ section, onPrepare }: { section: 'overview' | 'records' | 'upcoming'; onPrepare: (a: Application) => void }) {
+  const { data, update } = useData();
+  const [search, setSearch] = useState('');
+  const [company, setCompany] = useState('全部公司');
+  const [page, setPage] = useState(1);
+  const [stage, setStage] = useState('全部阶段');
+  const [sort, setSort] = useState('最近更新');
+  const [view, setView] = useState<'table' | 'board'>('table');
+  const [archived, setArchived] = useState(false);
+  const [editing, setEditing] = useState<Application | null>(null);
+  const [detailId, setDetailId] = useState('');
+  const [error, setError] = useState('');
+  const active = data.applications.filter(a => !a.archived);
+  const detail = data.applications.find(a => a.id === detailId);
+  const today = localDate();
+  const pending = active.filter(a => a.stage !== '已结束' && a.stage !== 'Offer' && a.scheduleAt).sort((a,b) => (a.scheduleAt || '').localeCompare(b.scheduleAt || ''));
+  const filtered = data.applications.filter(a => !!a.archived === archived && (company === '全部公司' || a.company === company) && (stage === '全部阶段' || a.stage === stage) && `${a.company} ${a.position} ${a.city} ${a.source}`.toLowerCase().includes(search.toLowerCase())).sort((a,b) => sort === '公司名称' ? a.company.localeCompare(b.company, 'zh-CN') : sort === '优先级' ? ['重点','普通','备选'].indexOf(a.priority) - ['重点','普通','备选'].indexOf(b.priority) : sort === '投递日期' ? b.appliedDate.localeCompare(a.appliedDate) : b.updatedAt-a.updatedAt);
+  useEffect(() => setPage(1), [search, stage, company, archived, sort]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 8));
+  const currentPage = Math.min(page, pageCount);
+  const visibleRecords = filtered.slice((currentPage-1)*8, currentPage*8);
+  function editStage(a: Application, s: ApplicationStage) { update(d => ({ ...d, applications: d.applications.map(r => r.id === a.id ? changeStage(r,s,d) : r) })); }
+  function toggleArchive(a: Application) { update(d => ({ ...d, applications: d.applications.map(r => r.id === a.id ? { ...r, archived: !r.archived, updatedAt: Date.now(), history: [...(r.history || []), { date: Date.now(), text: r.archived ? '恢复到投递记录' : '归档记录' }] } : r) })); setDetailId(''); }
+  function save() {
+    if (!editing) return;
+    if (!editing.company.trim() || !editing.position.trim()) { setError('请填写公司与岗位名称'); return; }
+    if (editing.url && !safeUrl(editing.url)) { setError('岗位链接需要以 http:// 或 https:// 开头'); return; }
+    update(d => {
+      const old = d.applications.find(a => a.id === editing.id);
+      let record = { ...editing, company: editing.company.trim(), position: editing.position.trim(), updatedAt: Date.now(), history: [...(old?.history || []), { date: Date.now(), text: old ? '编辑岗位信息' : '添加岗位' }] };
+      if (old && old.stage !== editing.stage) record = changeStage({ ...record, stage: old.stage }, editing.stage, d);
+      if (!old && record.stage !== '待投递' && record.stage !== '已结束') record = { ...record, appliedDate: record.appliedDate || localDate(), snapshot: captureResume(d, record.resumeId) };
+      return { ...d, applications: old ? d.applications.map(a => a.id === record.id ? record : a) : [...d.applications,record] };
+    });
+    setEditing(null); setError('');
+  }
+  function openEdit(a: Application) { setEditing(JSON.parse(JSON.stringify(a))); setError(''); }
+  function downloadSnapshot(a: Application) {
+    if (!a.snapshot) return;
+    exportResumeDocx(a.snapshot.resume, a.snapshot.categories, a.snapshot.entries).catch(e => setError(e.message));
+  }
+  const stats = [
+    ['投递总数', active.filter(a => a.appliedDate).length, 'file', ''],
+    ['今日投递', active.filter(a => a.appliedDate === today).length, 'calendar', ''],
+    ['进行中的流程', active.filter(a => ['笔试','一面','二面','HR面'].includes(a.stage)).length, 'clock', ''],
+    ['七天内安排', pending.filter(a => new Date(a.scheduleAt).getTime() >= Date.now() && new Date(a.scheduleAt).getTime() < Date.now()+7*86400000).length, 'calendar', ''],
+    ['Offer 数量', active.filter(a => a.stage === 'Offer').length, 'award', ''],
+  ];
+  function scheduleCard(a: Application) {
+    const overdue = new Date(a.scheduleAt || 0).getTime() < Date.now();
+    return <button className="schedule-card" key={a.id} onClick={() => setDetailId(a.id)}><span className={`schedule-date ${overdue ? 'overdue' : ''}`}>{(a.scheduleAt || '').replace('T',' ')}{overdue && ' · 待处理'}</span><strong>{a.company} · {a.position}</strong><span>{a.scheduleNote || a.nextAction || '查看安排详情'}</span><span className="stage-badge" data-stage={a.stage}>{a.stage}</span></button>;
+  }
+  return <div className="tracker-shell">
+    <header className="tracker-heading"><div><h1>{section === 'upcoming' ? '未来安排' : section === 'records' ? '投递记录' : '总览'}</h1></div><div className="toolbar"><button className="btn primary" onClick={() => openEdit(blank())}>＋ 添加投递</button></div></header>
+    {error && !editing && <div className="error" role="alert">{error}</div>}
+    <div className="tracker-stats">{stats.map(([label,value,icon,caption],i) => <div className="tracker-stat" key={String(label)}><div><span>{label}</span><span className={`stat-symbol tone-${i}`}><Icon name={String(icon)} /></span></div><strong>{value}</strong><small>{caption}</small></div>)}</div>
+    {section === 'upcoming' ? <section className="tracker-panel"><div className="tracker-panel-head"><div><h2>笔试、面试与下一步行动</h2><p>按时间排序，逾期安排保留直到你更新或清除。</p></div></div><div className="schedule-grid">{pending.map(scheduleCard)}{!pending.length && <div className="tracker-empty">暂无待办安排。在岗位详情中添加时间与事项。</div>}</div></section> : <div className="tracker-dashboard"><div className="tracker-main">
+      <section className="tracker-panel distribution-panel"><div className="tracker-panel-head"><div><h2>投递阶段分布</h2></div><span className="muted">{active.length} 个机会</span></div><div className="stage-distribution">{STAGES.map(s => { const count = active.filter(a => a.stage === s).length; return <button className={`stage-cell ${stage === s ? 'chosen' : ''}`} key={s} data-stage={s} onClick={() => setStage(stage === s ? '全部阶段' : s)}><div><span>{s}</span><strong>{count}</strong></div><div className="stage-bar"><i style={{ width: `${active.length ? count/active.length*100 : 0}%` }} /></div></button>; })}</div></section>
+      <section className="tracker-panel"><div className="tracker-panel-head"><div><h2>投递记录</h2></div><div className="view-switch"><button className={view === 'table' ? 'active' : ''} onClick={() => setView('table')}>列表</button><button className={view === 'board' ? 'active' : ''} onClick={() => setView('board')}>看板</button></div></div>
+        <div className="tracker-filters"><select aria-label="筛选公司" value={company} onChange={e => setCompany(e.target.value)}><option>全部公司</option>{[...new Set(data.applications.map(a => a.company))].sort().map(c => <option key={c}>{c}</option>)}</select><input aria-label="搜索岗位" placeholder="搜索公司、岗位、城市…" value={search} onChange={e => setSearch(e.target.value)} /><select aria-label="筛选阶段" value={stage} onChange={e => setStage(e.target.value)}><option>全部阶段</option>{STAGES.map(s => <option key={s}>{s}</option>)}</select><select aria-label="排序" value={sort} onChange={e => setSort(e.target.value)}>{['最近更新','投递日期','优先级','公司名称'].map(s => <option key={s}>{s}</option>)}</select></div>
+        <div className="record-meta"><span>共 {filtered.length} 条{archived ? '归档' : ''}记录</span><label><input type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} /> 查看归档</label></div>
+        {!filtered.length ? <div className="tracker-empty"><span className="empty-illustration">↗</span><h3>{data.applications.length ? '没有符合条件的记录' : '从第一个心仪岗位开始'}</h3><p>{data.applications.length ? '调整搜索、阶段筛选或查看归档记录。' : '添加公司和岗位，保存 JD，再为它准备一份简历。'}</p>{!data.applications.length && <button className="btn primary" onClick={() => openEdit(blank())}>＋ 添加第一个岗位</button>}</div> : view === 'table' ? <div className="tracker-table-scroll"><table className="tracker-table compact-records"><thead><tr>{['公司','职位','投递日期','当前阶段','下次安排','操作'].map(t => <th key={t}>{t}</th>)}</tr></thead><tbody>{visibleRecords.map(a => <tr key={a.id}><td><button className="company-button" onClick={() => setDetailId(a.id)}>{a.company}</button>{a.priority === '重点' && <span className="priority-mark">★ 重点机会</span>}</td><td>{a.position}</td><td>{a.appliedDate || '尚未投递'}</td><td><select className="stage-badge stage-select" data-stage={a.stage} aria-label={`${a.company}招聘阶段`} value={a.stage} onChange={e => editStage(a,e.target.value as ApplicationStage)}>{STAGES.map(s => <option key={s}>{s}</option>)}</select></td><td><div className={a.scheduleAt && new Date(a.scheduleAt).getTime() < Date.now() ? 'overdue' : ''}>{(a.scheduleAt || '').replace('T',' ') || '—'}</div><div className="position-text">{a.scheduleNote}</div></td><td><div className="row-tools"><button onClick={() => setDetailId(a.id)}>详情</button><button onClick={() => openEdit(a)}>编辑</button>{a.stage !== '已结束' && a.stage !== 'Offer' && <button onClick={() => editStage(a,STAGES[STAGES.indexOf(a.stage)+1])}>推进</button>}</div></td></tr>)}</tbody></table><div className="table-pagination"><span>共 {filtered.length} 条</span><div><button aria-label="上一页" disabled={currentPage === 1} onClick={() => setPage(currentPage-1)}>‹</button>{Array.from({length: pageCount}, (_,i) => i+1).filter(p => p === 1 || p === pageCount || Math.abs(p-currentPage) <= 1).map(p => <button key={p} className={p === currentPage ? "selected" : ""} onClick={() => setPage(p)}>{p}</button>)}<button aria-label="下一页" disabled={currentPage === pageCount} onClick={() => setPage(currentPage+1)}>›</button></div></div></div> : <div className="kanban-scroll">{STAGES.filter(s => stage === '全部阶段' || s === stage).map(s => <div className="kanban-column" key={s} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const a = data.applications.find(x => x.id === e.dataTransfer.getData('text/plain')); if (a) editStage(a,s); }}><h3><span className="stage-badge" data-stage={s}>{s}</span><span>{filtered.filter(a => a.stage === s).length}</span></h3>{filtered.filter(a => a.stage === s).map(a => <button draggable onDragStart={e => e.dataTransfer.setData('text/plain',a.id)} className="kanban-card" key={a.id} onClick={() => setDetailId(a.id)}><strong>{a.company}</strong><span>{a.position}</span><small>{a.city || '地点待确认'} · {a.priority}</small><p>{a.nextAction || '添加下一步行动'}</p>{a.scheduleAt && <small>{a.scheduleAt.replace('T',' ')}</small>}</button>)}</div>)}</div>}
+      </section>
+    </div><aside className="tracker-side"><section className="tracker-panel"><div className="tracker-panel-head"><div><h2>未来安排</h2></div><span className="stat-symbol tone-3"><Icon name="calendar" /></span></div><div className="schedule-list">{pending.slice(0,5).map(scheduleCard)}{!pending.length && <p className="tracker-small-empty">暂无安排，添加面试或截止时间后会显示在这里。</p>}</div></section><div className="tracker-tip reference-hidden"><strong>让简历与岗位一起准备</strong><p>在岗位详情中点击「准备简历」，带着 JD 进入工作室。投递后保存快照，面试前随时找回。</p></div><div className="tracker-tip backup-tip reference-hidden"><strong>记得备份你的求职记录</strong><p>在「设置与备份」中导出数据。不同设备与浏览器之间暂不自动同步。</p></div></aside></div>}
+    {editing && <Modal title={data.applications.some(a => a.id === editing.id) ? '编辑投递记录' : '添加新岗位'} onClose={() => setEditing(null)} width={760}><form onSubmit={e => { e.preventDefault(); save(); }}><div className="form-grid">{(['company','position','city','salary','source','url','appliedDate','scheduleAt','scheduleNote','nextAction'] as const).map((key,i) => <label className="field" key={key}><span>{['公司名称 *','岗位名称 *','城市','薪资范围','投递渠道','岗位链接','投递日期','安排时间','安排事项','下一步行动'][i]}</span><input type={key === 'appliedDate' ? 'date' : key === 'scheduleAt' ? 'datetime-local' : 'text'} required={key === 'company' || key === 'position'} value={editing[key]} onChange={e => setEditing(a => a && ({ ...a,[key]: e.target.value }))} /></label>)}<label className="field"><span>招聘阶段</span><select value={editing.stage} onChange={e => setEditing(a => a && ({ ...a,stage: e.target.value as ApplicationStage }))}>{STAGES.map(s => <option key={s}>{s}</option>)}</select></label><label className="field"><span>优先级</span><select value={editing.priority} onChange={e => setEditing(a => a && ({ ...a,priority: e.target.value as Application['priority'] }))}>{['重点','普通','备选'].map(s => <option key={s}>{s}</option>)}</select></label><label className="field span-2"><span>关联简历</span><select value={editing.resumeId} onChange={e => setEditing(a => a && ({ ...a,resumeId: e.target.value }))}><option value="">暂不关联</option>{data.resumes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label><label className="field span-2"><span>职位描述 JD</span><textarea rows={5} placeholder="粘贴岗位职责与要求，用于准备定制简历" value={editing.jd} onChange={e => setEditing(a => a && ({ ...a,jd: e.target.value }))} /></label><label className="field span-2"><span>沟通记录 / 备注</span><textarea rows={3} value={editing.notes} onChange={e => setEditing(a => a && ({ ...a,notes: e.target.value }))} /></label></div>{error && <div className="error" role="alert">{error}</div>}<div className="modal-foot"><button type="button" className="btn" onClick={() => setEditing(null)}>取消</button><button className="btn primary" type="submit">保存岗位</button></div></form></Modal>}
+    {detail && <div className="drawer-overlay" onClick={() => setDetailId('')}><aside className="job-drawer" role="dialog" aria-modal="true" aria-label="岗位详情" onClick={e => e.stopPropagation()}><header><div><div className="page-kicker">岗位详情</div><h2>{detail.company}</h2><p>{detail.position} · {detail.city || '地点待确认'}</p></div><button className="icon-btn" aria-label="关闭岗位详情" onClick={() => setDetailId('')}>✕</button></header><div className="toolbar"><span className="stage-badge" data-stage={detail.stage}>{detail.stage}</span><span className="priority-mark">{detail.priority}</span><button className="btn small" onClick={() => openEdit(detail)}>编辑</button><button className="btn small" onClick={() => toggleArchive(detail)}>{detail.archived ? '恢复记录' : '归档'}</button></div><section><h3>岗位信息</h3><div className="detail-info"><span>薪资：{detail.salary || '待确认'}</span><span>渠道：{detail.source || '未填写'}</span><span>投递：{detail.appliedDate || '尚未投递'}</span>{safeUrl(detail.url) && <a href={safeUrl(detail.url)} target="_blank" rel="noreferrer">打开原始岗位 ↗</a>}</div><p className="detail-pre">{detail.jd || '尚未保存职位描述。可以先编辑补充 JD。'}</p></section><section><h3>简历准备</h3><p>关联版本：{data.resumes.find(r => r.id === detail.resumeId)?.name || '尚未关联 / 原简历已删除'}</p><button className="btn primary" onClick={() => onPrepare(detail)}>准备这份简历 →</button>{detail.snapshot ? <div className="snapshot-box"><strong>已保存投递快照</strong><p>{new Date(detail.snapshot.date).toLocaleString('zh-CN')}</p><button className="btn small" onClick={() => downloadSnapshot(detail)}>导出当时的简历</button><p>后续修改简历或素材，不会改变此快照。</p></div> : <div className="snapshot-box"><p>确认这份简历就是实际投递的文件后，保存快照。</p><button className="btn small" disabled={!data.resumes.some(r => r.id === detail.resumeId)} onClick={() => update(d => ({ ...d, applications: d.applications.map(a => a.id === detail.id ? { ...a,snapshot: captureResume(d,a.resumeId),history: [...(a.history || []),{ date: Date.now(),text: '保存投递简历快照' }] } : a) }))}>保存投递快照</button></div>}</section><section><h3>下一步与备注</h3><p>{detail.nextAction || '还没有下一步行动'}</p>{detail.scheduleAt && <p>{detail.scheduleAt.replace('T',' ')} · {detail.scheduleNote}</p>}<p className="detail-pre">{detail.notes || '暂无备注'}</p></section><section><h3>进展时间线</h3><div className="job-timeline">{[...(detail.history || [])].reverse().map((h,i) => <div key={i}><strong>{h.text}</strong><small>{new Date(h.date).toLocaleString('zh-CN')}</small></div>)}</div></section></aside></div>}
+  </div>;
+}
