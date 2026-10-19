@@ -2,7 +2,10 @@
 
 一个跑在本机浏览器里的简历工作台：**事实只记一次，讲法可以有很多份**。
 
-双击 `启动.bat` 即可使用，浏览器自动打开 `http://localhost:4173`。
+纯本地运行，数据存在你自己电脑的 `data/` 目录里，不上传任何服务器。
+
+- **Windows**：双击 `启动.bat`，自动完成安装、构建、启动并打开浏览器。
+- **Mac / Linux**：看下面的「三、运行」，三条命令即可。
 
 ---
 
@@ -99,24 +102,42 @@ Experience（档案，事实）  ──引用──>  ResumeItem（简历，讲�
 
 ## 三、运行
 
-```
-双击 启动.bat
-```
+### 前置要求
 
-脚本会**先执行 `npm run build` 再启动服务**。这一步是刻意的：
-旧版打包好的 EXE 早于代码修复，每次启动都直接跑旧 EXE，
-导致"改了代码但没生效"。现在保证运行的永远是当前源码。
+- **Node.js 18 或更高**（`node -v` 查看），推荐 20 / 22
+- 不需要数据库、不需要注册账号
 
-手动运行：
+### 获取并启动
 
 ```bash
-npm install     # 首次
-npm run build   # 构建前端
-npm start       # 启动服务，默认 http://localhost:4173
+git clone https://github.com/qyuc02/resume-assistant.git
+cd resume-assistant
+
+npm install      # 安装依赖，约 100 个包
+npm run build    # 构建前端，必须执行（dist/ 不进版本库）
+npm start        # 启动，然后打开 http://localhost:4173
 ```
 
-开发模式：`npm run dev`（Vite 热更新，端口 5173）。
-端口占用：设置 `PORT=xxxx`。不想自动开浏览器：设置 `NO_OPEN=1`。
+三步通常十几秒完成。
+
+**`npm run build` 不能跳过**：构建产物 `dist/` 故意不提交到仓库，
+所以刚克隆下来是没有 `dist/` 的。直接 `npm start` 会提示「未找到 dist 构建产物」，
+首页打不开。这是设计如此，不是装错了。
+
+### Windows 一键启动
+
+双击 `启动.bat`，脚本会自动做完上面三件事并弹出浏览器窗口。
+
+它**先构建再启动**是刻意的：旧版曾优先运行已打包的 EXE，
+导致「改了代码却没生效」。现在保证运行的永远是当前源码。
+
+### 其它
+
+- 开发模式：`npm run dev`（Vite 热更新，端口 5173）
+- 换端口：`PORT=8080 npm start`；Windows 下用 `set PORT=8080 && npm start`
+- 禁止自动开浏览器：`NO_OPEN=1`
+- 首次启动是空白数据，`data/` 目录会自动创建，不需要手动建
+- 关闭服务：在终端按 `Ctrl+C`
 
 ---
 
