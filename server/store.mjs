@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { emptyData, migrate } from './schema.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DATA_DIR = path.join(ROOT, 'data');
+// Electron 打包后通过 DATA_DIR 环境变量把数据改到用户目录；纯 Node 模式默认用项目目录 data/
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const FILE = path.join(DATA_DIR, 'app-data.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const MAX_BACKUPS = 20;

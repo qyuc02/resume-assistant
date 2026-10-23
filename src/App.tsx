@@ -159,8 +159,7 @@ export default function App() {
               简
             </div>
             <div className="brand-text">
-              <strong>简历助手</strong>
-              <span>事实归档案，说法归简历</span>
+              <strong>Hi，{data.profile.name.trim() || '朋友'}</strong>
             </div>
           </div>
           <nav className="nav">

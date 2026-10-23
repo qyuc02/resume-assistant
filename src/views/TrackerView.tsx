@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../App';
 import type { AppData, Application, ApplicationStage, InterviewQuestion, InterviewQuestionType, InterviewRecord, KnowledgePoint, KnowledgePriority, Snapshot } from '../types';
 import { STAGES } from '../types';
@@ -35,10 +35,43 @@ function avatarTone(name: string) {
   return `t${(n % 8) + 1}`;
 }
 
-/** 公司头像：手动上传 logo 则显示 logo，否则显示公司名首字（不联网抓取） */
-function CompanyAvatar({ name, logo }: { name: string; logo?: string }) {
+/** 归一化到主域名，去掉 hr/careers/www 等子域，提高 favicon 命中率 */
+function rootDomain(host: string): string {
+  const parts = host.split('.').filter(Boolean);
+  if (parts.length <= 2) return host;
+  const last2 = parts.slice(-2).join('.');
+  const doubleSuffix = ['com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn', 'co.uk', 'com.hk', 'co.jp'];
+  if (doubleSuffix.includes(last2) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return last2;
+}
+
+/** 公司头像：优先手动上传的 logo；否则走本地 /api/logo（服务端抓取后缓存到 data/logos，只发域名不发简历内容），失败退回首字 */
+function CompanyAvatar({ name, url, logo }: { name: string; url: string; logo?: string }) {
+  const [failed, setFailed] = useState(false);
+  const domain = useMemo(() => {
+    try {
+      return rootDomain(new URL(url).hostname);
+    } catch {
+      return '';
+    }
+  }, [url]);
+  useEffect(() => {
+    setFailed(false);
+  }, [domain]);
   if (logo) {
     return <img className="avatar-logo" src={logo} alt="" />;
+  }
+  if (domain && !failed) {
+    return (
+      <img
+        className="avatar-logo"
+        src={`/api/logo?domain=${encodeURIComponent(domain)}`}
+        onError={() => setFailed(true)}
+        alt=""
+      />
+    );
   }
   return <span className={`avatar ${avatarTone(name)}`}>{(name || '?').slice(0, 1)}</span>;
 }
@@ -62,6 +95,11 @@ function blank(): Application {
     nextAction: '',
     notes: '',
     resumeId: '',
+    learning: [],
+    learningGeneratedAt: 0,
+    interviewPrep: [],
+    interviewPrepAt: 0,
+    interviews: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
     archived: false,
@@ -437,7 +475,7 @@ export default function TrackerView() {
                 <tr key={a.id}>
                   <td>
                     <div className="company-cell">
-                      <CompanyAvatar name={a.company} logo={a.logo} />
+                      <CompanyAvatar key={a.id} name={a.company} url={a.url} logo={a.logo} />
                       <div>
                         <button className="btn ghost" style={{ padding: 0 }} onClick={() => setDetailId(a.id)}>
                           <strong>{a.company}</strong>

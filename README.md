@@ -1,11 +1,11 @@
 # 简历助手
 
-一个跑在本机浏览器里的简历工作台：**事实只记一次，讲法可以有很多份**。
+一个跑在本机的简历工作台：**事实只记一次，讲法可以有很多份**。
 
-纯本地运行，数据存在你自己电脑的 `data/` 目录里，不上传任何服务器。
+纯本地运行，数据只存在你自己电脑上，不上传任何服务器。
 
-- **Windows**：双击 `启动.bat`，自动完成安装、构建、启动并打开浏览器。
-- **Mac / Linux**：看下面的「三、运行」，三条命令即可。
+- **给普通用户（打包版）**：下载安装包双击安装即用，无需装 Node——见下方「三、运行 · 打包成桌面应用」。
+- **给开发者（网页版）**：Windows 双击 `启动.bat`；Mac / Linux 看「三、运行」三条命令。
 
 ---
 
@@ -102,6 +102,26 @@ Experience（档案，事实）  ──引用──>  ResumeItem（简历，讲�
 
 ## 三、运行
 
+### 打包成桌面应用（给非技术用户）
+
+想把软件发给不懂技术的朋友用，打包成安装包，对方双击即用，**不需要装 Node、不需要命令行**。
+打包版的数据存在系统用户目录（Windows `%APPDATA%\简历助手\data`，macOS `~/Library/Application Support/简历助手/data`），和网页版互不影响。
+
+**Windows 安装包**（在当前这台电脑上即可打包）：
+
+```bash
+npm run pack:win      # 或 npm run pack
+```
+
+产物在 `release/简历助手 Setup x.x.x.exe`。
+
+**macOS 安装包**（`.dmg` 只能在 macOS 上构建，Windows 本机打不出来）：
+
+- 在 Mac 上：克隆仓库 → `npm install` → `npm run pack:mac`，产物在 `release/简历助手-x.x.x-{arm64,x64}.dmg`（arm64 给 Apple 芯片，x64 给 Intel 老款）。
+- 没有 Mac：把仓库推到 GitHub，用本仓库自带的 Actions（`.github/workflows/build.yml`）在云端自动打包，完事在 Actions 页面下载 `简历助手-mac` 产物即可。
+
+> 未签名的 mac 包首次打开时系统会拦一道「无法验证开发者」。对方在 Finder 里**右键点应用 → 打开**（或终端跑 `xattr -cr /Applications/简历助手.app`）一次即可，属 macOS 对未付费开发者账号的正常限制，不影响使用。
+
 ### 前置要求
 
 - **Node.js 18 或更高**（`node -v` 查看），推荐 20 / 22
@@ -124,12 +144,13 @@ npm start        # 启动，然后打开 http://localhost:4173
 所以刚克隆下来是没有 `dist/` 的。直接 `npm start` 会提示「未找到 dist 构建产物」，
 首页打不开。这是设计如此，不是装错了。
 
-### Windows 一键启动
+### 一键启动
 
-双击 `启动.bat`，脚本会自动做完上面三件事并弹出浏览器窗口。
+- **Windows**：双击 `启动.bat`。
+- **macOS / Linux**：终端执行 `bash 启动.sh`。
 
-它**先构建再启动**是刻意的：旧版曾优先运行已打包的 EXE，
-导致「改了代码却没生效」。现在保证运行的永远是当前源码。
+脚本会自动做完上面三件事并弹出浏览器窗口。它**先构建再启动**是刻意的：
+旧版曾优先运行已打包的 EXE，导致「改了代码却没生效」。现在保证运行的永远是当前源码。
 
 ### 其它
 
@@ -145,6 +166,8 @@ npm start        # 启动，然后打开 http://localhost:4173
 
 ```
 ├── 启动.bat              # 唯一入口：构建 + 启动
+├── electron/
+│   └── main.mjs          # Electron 主进程（桌面版入口）
 ├── server/
 │   ├── index.mjs         # 静态托管 + /api/data + /api/ai
 │   ├── schema.mjs        # 数据结构定义与归一化（唯一事实来源）
@@ -161,7 +184,9 @@ npm start        # 启动，然后打开 http://localhost:4173
 │   └── components/       # 弹窗、图标、简历纸张
 ├── data/
 │   ├── app-data.json     # 你的数据
+│   ├── logos/            # 公司 logo 本地缓存
 │   └── backups/          # 自动备份
+├── release/              # 打包产物（gitignore）
 └── _legacy/              # 旧版代码归档，不参与构建
 ```
 

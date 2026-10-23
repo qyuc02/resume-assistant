@@ -17,7 +17,7 @@ export default function SettingsView() {
 
   function saveKey() {
     setApiKey(key.trim());
-    flash('已保存在本机浏览器。AI 功能不填也能正常使用其他全部功能。');
+    flash('已保存在本机。AI 功能不填也能正常使用其他全部功能。');
   }
 
   function exportData() {
@@ -81,7 +81,7 @@ export default function SettingsView() {
       <div className="page-head">
         <div>
           <h1>设置与数据</h1>
-          <div className="sub">数据存在项目目录的 data/app-data.json，每次保存都会自动留一份备份。</div>
+          <div className="sub">数据只存在本机（应用数据目录），每次保存都会自动留一份备份。</div>
           <div className="toolbar" style={{ marginTop: 10 }}>
             <span className="badge accent">本机存储 · 不上传</span>
             <span className="badge violet">{data.experiences.length} 条经历</span>
@@ -130,8 +130,9 @@ export default function SettingsView() {
           <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-..." />
         </label>
         <p className="muted" style={{ marginTop: 8 }}>
-          用于简历解析、按 JD 诊断和要点润色。Key 只存在本机浏览器，调用时相关简历内容会发送给 DeepSeek。
-          <strong>不填也不会影响其他任何功能。</strong>可在 platform.deepseek.com 申请。
+          用于简历解析、按 JD 诊断、学习规划、面试准备和要点润色。Key 只存在本机。
+          只有在你主动点击 AI 功能时，相关简历 / JD 内容才会发送给 DeepSeek，<strong>不会自动上传</strong>；
+          <strong>不填 Key 也不影响其他任何功能。</strong>可在 platform.deepseek.com 申请。
         </p>
         <button className="btn primary" style={{ marginTop: 10 }} onClick={saveKey}>
           保存
@@ -143,7 +144,7 @@ export default function SettingsView() {
           <h3>备份</h3>
         </div>
         <p className="muted">
-          数据文件：项目目录下 <code>data/app-data.json</code>。每次保存前会自动备份到 <code>data/backups/</code>（保留最近 20 份）。
+          数据文件存在本机应用数据目录（<code>app-data.json</code>），每次保存前会自动备份到 <code>backups/</code>（保留最近 20 份）。
         </p>
         <div className="toolbar" style={{ marginTop: 10 }}>
           <button className="btn" onClick={exportData}>
