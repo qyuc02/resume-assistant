@@ -12,9 +12,9 @@
     "build": "vite build",
     "start": "node server/index.mjs",
     "electron": "npm run build && electron .",
-    "pack": "npm run build && electron-builder --win",
-    "pack:win": "npm run build && electron-builder --win",
-    "pack:mac": "npm run build && electron-builder --mac",
+    "pack": "npm run build && electron-builder --win --publish never",
+    "pack:win": "npm run build && electron-builder --win --publish never",
+    "pack:mac": "npm run build && electron-builder --mac --publish never",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {},
