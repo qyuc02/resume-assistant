@@ -1,4 +1,4 @@
-# 在 GitHub Actions 上自动打包 Windows + macOS 安装包。
+# 在 GitHub Actions 上自动打包 Windows + macOS 安装包，并在打 tag 时发布成 Release。
 # macOS 的 .dmg 只能在 macOS 上构建，Windows 本地打不出来，所以放到云端跑。
 name: build
 
@@ -23,7 +23,7 @@ jobs:
         run: npm run pack:mac
       - uses: actions/upload-artifact@v4
         with:
-          name: 简历助手-mac
+          name: resume-assistant-mac
           path: release/*.dmg
 
   win:
@@ -40,5 +40,23 @@ jobs:
         run: npm run pack:win
       - uses: actions/upload-artifact@v4
         with:
-          name: 简历助手-windows
+          name: resume-assistant-win
           path: release/*.exe
+
+  # 只有打 tag 时才发布 Release；手动跑 workflow_dispatch 只出产物、不建 Release。
+  release:
+    needs: [mac, win]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: resume-assistant-*
+          merge-multiple: true
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
